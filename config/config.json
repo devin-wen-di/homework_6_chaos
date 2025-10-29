@@ -1,0 +1,15 @@
+{
+  "g": 9.8,
+  "l": 1.0,
+  "q": 0.1,
+  "f_d": 1.0,
+  "omega_d": 1.0,
+  "dt": 0.001,
+  "t_end": 10.0,
+  "theta_start": -4.0,
+  "theta_end": 4.0,
+  "d_theta": 0.01,
+  "omega_start": -4.0,
+  "omega_end": 4.0,
+  "d_omega": 0.01
+}

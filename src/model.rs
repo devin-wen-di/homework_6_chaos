@@ -1,6 +1,7 @@
 //model.rs
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendulumParams {
     //运动方程参数
     pub g: f64,

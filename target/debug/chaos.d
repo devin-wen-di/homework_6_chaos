@@ -1,1 +1,1 @@
-/home/di_wen/work/rust_projects/chaos/target/debug/chaos: /home/di_wen/work/rust_projects/chaos/src/main.rs
+/home/di_wen/work/rust_projects/chaos/target/debug/chaos: /home/di_wen/work/rust_projects/chaos/src/main.rs /home/di_wen/work/rust_projects/chaos/src/model.rs /home/di_wen/work/rust_projects/chaos/src/solve_equation.rs

@@ -1,5 +1,7 @@
 //solve_equation.rs
 use std::f64::consts::PI;
+use std::fs::File;
+use std::io::Write;
 use crate::model::PendulumParams;
 
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +61,138 @@ pub fn solve(params: &PendulumParams, initial_theta: f64, initial_omega: f64) ->
         trajectory.push((t, state.clone()));
     }
     trajectory
+}
+
+fn wrap_angle(theta: f64) -> f64 {
+    (theta + PI).rem_euclid(2.0 * PI) - PI
+}
+
+/// 计算庞加莱截面：在每个驱动周期处采样。
+///
+/// params: 系统参数（包含 dt, t_end, omega_d）
+/// initial_*: 初始角度与角速度
+/// transient_periods: 要丢弃的周期数（过渡）
+/// sample_periods: 采样的周期数
+/// 返回值：Vec<(theta, omega)>，按采样顺序排列
+/// 改进的庞加莱采样：在精确的驱动周期时刻采样
+pub fn poincare(
+    params: &PendulumParams,
+    initial_theta: f64,
+    initial_omega: f64,
+    transient_periods: usize,
+    sample_periods: usize,
+) -> Vec<(f64, f64)> {
+    let period = 2.0 * PI / params.omega_d;
+    
+    // 先计算完整轨迹
+    let traj = solve(params, initial_theta, initial_omega);
+    
+    let mut samples = Vec::new();
+    
+    for n in (transient_periods + 1)..=(transient_periods + sample_periods) {
+        let target_time = (n as f64) * period;
+        
+        // 找到目标时间前后的点
+        if let Some(idx) = traj.iter().position(|(t, _)| *t >= target_time) {
+            if idx > 0 {
+                let (t1, s1) = traj[idx - 1];
+                let (t2, s2) = traj[idx];
+                
+                // 线性插值
+                let frac = (target_time - t1) / (t2 - t1);
+                
+                // 角度插值需要考虑周期性
+                let mut theta_diff = s2.theta - s1.theta;
+                theta_diff = (theta_diff + PI).rem_euclid(2.0 * PI) - PI;
+                
+                let theta_interp = s1.theta + frac * theta_diff;
+                let omega_interp = s1.omega + frac * (s2.omega - s1.omega);
+                
+                samples.push((wrap_angle(theta_interp), omega_interp));
+            }
+        }
+    }
+    
+    samples
+}
+
+/// 把 poincare 结果写成 CSV 文件（两列：theta,omega）
+pub fn write_poincare_csv(
+    path: &str,
+    params: &PendulumParams,
+    initial_theta: f64,
+    initial_omega: f64,
+    transient_periods: usize,
+    sample_periods: usize,
+) -> std::io::Result<()> {
+    let samples = poincare(params, initial_theta, initial_omega, transient_periods, sample_periods);
+    let mut f = File::create(path)?;
+    writeln!(f, "theta,omega")?;
+    for (th, om) in samples {
+        writeln!(f, "{:.12},{:.12}", th, om)?;
+    }
+    Ok(())
+}
+
+/// 从已经计算好的轨迹中按驱动周期采样（线性/角度插值）
+pub fn sample_poincare_from_trajectory(
+    traj: &Vec<(f64, State)>,
+    params: &PendulumParams,
+    transient_periods: usize,
+    sample_periods: usize,
+) -> Vec<(f64, f64)> {
+    let period = 2.0 * PI / params.omega_d;
+
+    let mut samples = Vec::with_capacity(sample_periods);
+
+    // 生成要采样的时刻列表（以驱动周期为单位，从 1..=total_periods）
+    let start_n = transient_periods + 1;
+    let end_n = transient_periods + sample_periods;
+
+    for n in start_n..=end_n {
+        let t_sample = (n as f64) * period;
+        // 在 traj 中找到包含 t_sample 的相邻点
+        if let Some(i) = traj.iter().position(|(t, _)| *t >= t_sample) {
+            if i == 0 {
+                // 如果第一个点就大于等于采样时间，直接取该点
+                let (_, s) = &traj[i];
+                samples.push((wrap_angle(s.theta), s.omega));
+            } else {
+                let (t1, s1) = &traj[i - 1];
+                let (t2, s2) = &traj[i];
+                let dt = t2 - t1;
+                if dt <= 0.0 {
+                    let (_, s) = &traj[i];
+                    samples.push((wrap_angle(s.theta), s.omega));
+                } else {
+                    let alpha = (t_sample - t1) / dt;
+                    // 角度需要做周期展开再插值
+                    let mut dtheta = s2.theta - s1.theta;
+                    dtheta = (dtheta + PI).rem_euclid(2.0 * PI) - PI;
+                    let theta_interp = s1.theta + alpha * dtheta;
+                    let omega_interp = s1.omega + alpha * (s2.omega - s1.omega);
+                    samples.push((wrap_angle(theta_interp), omega_interp));
+                }
+            }
+        } else {
+            // 未找到大于等于 t_sample 的点（轨迹不够长），跳出
+            break;
+        }
+    }
+
+    samples
+}
+
+/// 使用现有的 solve() 先计算完整轨迹，然后从轨迹中按周期采样（推荐）
+pub fn poincare_via_solve(
+    params: &PendulumParams,
+    initial_theta: f64,
+    initial_omega: f64,
+    transient_periods: usize,
+    sample_periods: usize,
+) -> Vec<(f64, f64)> {
+    let traj = solve(params, initial_theta, initial_omega);
+    sample_poincare_from_trajectory(&traj, params, transient_periods, sample_periods)
 }
 
 #[cfg(test)]
