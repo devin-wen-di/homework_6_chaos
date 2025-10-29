@@ -31,7 +31,8 @@ impl PendulumParams {
             f_d: 1.0,
             omega_d: 1.0,
 
-            dt: 0.01,
+            // 使用更小的步长以提高 RK4 与解析解的一致性
+            dt: 0.001,
             t_end: 10.0,
             
             theta_start: -4.0,
